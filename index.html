@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Wiener Explorer</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000;touch-action:none;-webkit-user-select:none;user-select:none;font-family:Arial,Helvetica,sans-serif;color:#fff}
+canvas{display:block}
+#hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:12px;right:12px;display:flex;justify-content:space-between;font-weight:bold;font-size:15px;text-shadow:0 0 6px #000;pointer-events:none}
+#msg{position:fixed;top:22%;left:0;right:0;text-align:center;font-size:18px;text-shadow:0 0 8px #000;pointer-events:none;padding:0 20px;transition:opacity .4s}
+#overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:radial-gradient(#0b1030cc,#000e);z-index:5}
+#overlay h1{font-size:40px;margin:0 0 8px;color:#ffcf6b;text-shadow:0 0 18px #ff8a00}
+#overlay p{margin:6px 22px;font-size:16px;line-height:1.4;opacity:.92}
+#overlay .go{margin-top:20px;font-size:22px;padding:12px 30px;border:2px solid #ffcf6b;border-radius:30px;color:#ffcf6b}
+.btn{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);width:78px;height:78px;border-radius:50%;background:#ffffff22;border:2px solid #ffffff66;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;z-index:3}
+#thrust{right:22px;bottom:calc(env(safe-area-inset-bottom,0px) + 110px)}#brake{right:110px}#up{right:22px}
+#stick{position:fixed;left:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);width:140px;height:140px;border-radius:50%;background:#ffffff18;border:2px solid #ffffff55;z-index:3}
+#knob{position:absolute;left:45px;top:45px;width:50px;height:50px;border-radius:50%;background:#ffffffaa}
+#mini{position:fixed;top:calc(env(safe-area-inset-top,0px) + 36px);right:12px;font-size:13px;text-align:right;line-height:1.5;text-shadow:0 0 6px #000;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hud"><span id="timer">☀️ 5:00</span><span id="found">🦴 0/5</span></div>
+<div id="mini"></div>
+<div id="msg"></div>
+<div id="stick"><div id="knob"></div></div>
+<div class="btn" id="thrust">BOOST</div><div class="btn" id="brake">BRAKE</div><div class="btn" id="up">LIFT</div>
+<div id="overlay"><h1>🌭 Wiener Explorer</h1>
+<p>You are Frank, a dachshund astronaut in a tiny ship.</p>
+<p>The sun will go supernova in <b>5 minutes</b>. Every time it does, the universe loops back to the start.</p>
+<p>Fly to the planets and find the <b>5 ancient bones</b> left by the old Wiener civilization to learn the secret before time runs out.</p>
+<p style="font-size:14px;opacity:.75">Left stick: steer · BOOST: fly forward · BRAKE: slow/reverse · LIFT: up<br>Fly close to a glowing bone to collect it. Keys: WASD + Shift/Space/Ctrl</p>
+<div class="go" id="go">Launch 🚀</div><p id="loops" style="font-size:13px;opacity:.6"></p></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+
+const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));R.setSize(innerWidth,innerHeight);
+R.toneMapping=THREE.ACESFilmicToneMapping;R.outputColorSpace=THREE.SRGBColorSpace;document.body.prepend(R.domElement);
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,20000);
+const comp=new EffectComposer(R);comp.addPass(new RenderPass(scene,cam));
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.9,0.5,0.6);comp.addPass(bloom);comp.addPass(new OutputPass());
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight);comp.setSize(innerWidth,innerHeight);});
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+// stars
+{const g=new THREE.BufferGeometry();const p=[];const c=[];for(let i=0;i<4000;i++){const v=new THREE.Vector3().randomDirection().multiplyScalar(rnd(6000,9000));p.push(v.x,v.y,v.z);const k=rnd(.6,1);c.push(k,k,rnd(.8,1));}
+g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));
+scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:9,vertexColors:true,sizeAttenuation:true})));}
+scene.add(new THREE.AmbientLight(0x445577,0.9));const fill=new THREE.DirectionalLight(0xbfd8ff,1.4);
+const sunLight=new THREE.PointLight(0xfff0d0,4,0,0);scene.add(sunLight);
+
+// sun
+const sunMat=new THREE.MeshBasicMaterial({color:0xffb347});
+const sun=new THREE.Mesh(new THREE.SphereGeometry(160,48,32),sunMat);scene.add(sun);
+const glow=new THREE.Mesh(new THREE.SphereGeometry(200,32,24),new THREE.MeshBasicMaterial({color:0xff7a1a,transparent:true,opacity:.25,side:THREE.BackSide}));scene.add(glow);
+
+function tex(base,spots,n){const c=document.createElement('canvas');c.width=512;c.height=256;const g=c.getContext('2d');g.fillStyle=base;g.fillRect(0,0,512,256);
+  for(let i=0;i<n;i++){g.fillStyle=spots[Math.floor(Math.random()*spots.length)];g.globalAlpha=rnd(.25,.7);g.beginPath();g.ellipse(rnd(0,512),rnd(0,256),rnd(6,60),rnd(4,30),rnd(0,3),0,7);g.fill();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
+// planets: name, radius, orbit, color, speed
+const PL=[
+ {name:'Hearthbun',r:34,orbit:900,ph:0,sp:0.020,map:tex('#4f8a3c',['#2e6b2a','#8a7a4c','#3a8fb7','#c8b27a'],140),atmo:0x88ccff},
+ {name:'Mustard Twins',r:26,orbit:1350,ph:2,sp:0.014,map:tex('#d9a53a',['#b8761f','#f2d06b','#8c5a1a'],160),atmo:0xffcc66},
+ {name:'Ketchup Deep',r:46,orbit:1850,ph:4,sp:0.010,map:tex('#a3261e',['#6b1410','#d2493a','#ff8a6a','#3a0d0a'],160),atmo:0xff6a5a},
+ {name:'Bramble Bark',r:30,orbit:2400,ph:1,sp:0.008,map:tex('#3b2a1e',['#5a3f2a','#1e1510','#7a5a3a','#2f5a2a'],160),atmo:0x99aa77},
+ {name:'Frost Frank',r:22,orbit:3000,ph:5,sp:0.006,map:tex('#cfe6f2',['#ffffff','#9cc6dd','#7aa4c2'],140),atmo:0xddf2ff},
+];
+for(const p of PL){
+  p.g=new THREE.Group();scene.add(p.g);
+  p.mesh=new THREE.Mesh(new THREE.SphereGeometry(p.r,48,32),new THREE.MeshStandardMaterial({map:p.map,roughness:.9}));p.g.add(p.mesh);
+  p.g.add(new THREE.Mesh(new THREE.SphereGeometry(p.r*1.12,32,24),new THREE.MeshBasicMaterial({color:p.atmo,transparent:true,opacity:.13,side:THREE.BackSide})));
+  // trees/rocks on surface
+  for(let i=0;i<40;i++){const d=new THREE.Vector3().randomDirection();const tree=new THREE.Mesh(new THREE.ConeGeometry(rnd(.8,1.6),rnd(2.5,5),6),new THREE.MeshStandardMaterial({color:new THREE.Color(p.atmo).multiplyScalar(.5),flatShading:true}));
+    tree.position.copy(d.clone().multiplyScalar(p.r+1.5));tree.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d);p.mesh.add(tree);}
+  // bone (collectible) on surface
+  const bd=new THREE.Vector3().randomDirection();const bone=new THREE.Group();
+  const bm=new THREE.MeshStandardMaterial({color:0xfff6e0,emissive:0xffcc66,emissiveIntensity:1.4});
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,4,10),bm);shaft.rotation.z=Math.PI/2;bone.add(shaft);
+  for(const s of[-1,1])for(const k of[-1,1]){const k2=new THREE.Mesh(new THREE.SphereGeometry(.8,12,10),bm);k2.position.set(s*2,k*.55,0);bone.add(k2);}
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.6,.6,60,8,1,true),new THREE.MeshBasicMaterial({color:0xffd27a,transparent:true,opacity:.25}));beam.position.y=30;bone.add(beam);
+  bone.position.copy(bd.clone().multiplyScalar(p.r+2.2));bone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),bd);p.mesh.add(bone);p.bone=bone;
+  // orbit line
+  const og=new THREE.BufferGeometry().setFromPoints([...Array(129)].map((_,i)=>new THREE.Vector3(Math.cos(i/128*Math.PI*2)*p.orbit,0,Math.sin(i/128*Math.PI*2)*p.orbit)));
+  scene.add(new THREE.Line(og,new THREE.LineBasicMaterial({color:0x335577,transparent:true,opacity:.35})));
+}
+// moon
+const moon=new THREE.Mesh(new THREE.SphereGeometry(8,24,16),new THREE.MeshStandardMaterial({color:0x999999,roughness:1}));PL[0].g.add(moon);
+
+const LORE=[
+ 'Bone 1/5 — "We, the Wieners, came to this system chasing a signal… from the Eye of the Hot Dog."',
+ 'Bone 2/5 — "The sun is dying. We built a machine to send our memories 22 minutes back… we made it 5."',
+ 'Bone 3/5 — "Only a small brave dog would fit inside the loop machine."',
+ 'Bone 4/5 — "The loop will continue until a traveler finds all our bones."',
+ 'Bone 5/5 — "You found us. The secret of the universe is: belly rubs. 🐾" Loop broken!'
+];
+
+// ship + dachshund pilot
+const ship=new THREE.Group();scene.add(ship);
+const hull=new THREE.Mesh(new THREE.CylinderGeometry(1.4,1.9,3.4,12),new THREE.MeshStandardMaterial({color:0xd8d2c4,metalness:.5,roughness:.4}));hull.rotation.x=Math.PI/2;ship.add(hull);
+const nose=new THREE.Mesh(new THREE.ConeGeometry(1.4,1.8,12),new THREE.MeshStandardMaterial({color:0xc0392b,metalness:.3,roughness:.4}));nose.rotation.x=-Math.PI/2;nose.position.z=-2.6;ship.add(nose);
+const dome=new THREE.Mesh(new THREE.SphereGeometry(1.15,20,14,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({color:0x99ddff,transparent:true,opacity:.35,metalness:.2,roughness:.05}));dome.position.set(0,1.1,-.3);ship.add(dome);
+for(const s of[-1,1]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.25,1.3,.25),new THREE.MeshStandardMaterial({color:0x555555}));leg.position.set(s*1.5,-1.3,.6);leg.rotation.z=s*.35;ship.add(leg);
+  const wing=new THREE.Mesh(new THREE.BoxGeometry(1.8,.15,1.4),new THREE.MeshStandardMaterial({color:0xc0392b}));wing.position.set(s*2,0,.9);ship.add(wing);}
+const flame=new THREE.Mesh(new THREE.ConeGeometry(.9,3,12),new THREE.MeshBasicMaterial({color:0x66ccff,transparent:true,opacity:.9}));flame.rotation.x=Math.PI/2;flame.position.z=3.2;ship.add(flame);
+// pilot
+const fur=new THREE.MeshStandardMaterial({color:0x8b4513,roughness:.8});
+const pilot=new THREE.Group();pilot.position.set(0,1.15,-.3);ship.add(pilot);
+const ph=new THREE.Mesh(new THREE.SphereGeometry(.42,16,12),fur);ph.position.y=.25;pilot.add(ph);
+const sn=new THREE.Mesh(new THREE.CapsuleGeometry(.17,.35,4,8),fur);sn.rotation.x=Math.PI/2;sn.position.set(0,.15,-.5);pilot.add(sn);
+const nz=new THREE.Mesh(new THREE.SphereGeometry(.09,8,8),new THREE.MeshStandardMaterial({color:0x111111,roughness:.2}));nz.position.set(0,.17,-.78);pilot.add(nz);
+for(const s of[-1,1]){const ear=new THREE.Mesh(new THREE.CapsuleGeometry(.12,.38,4,6),new THREE.MeshStandardMaterial({color:0x5a2a0c}));ear.position.set(s*.4,.1,0);ear.rotation.z=s*.3;pilot.add(ear);
+  const eye=new THREE.Mesh(new THREE.SphereGeometry(.07,8,8),new THREE.MeshStandardMaterial({color:0x000000,roughness:.05}));eye.position.set(s*.17,.38,-.33);pilot.add(eye);}
+const helmet=new THREE.Mesh(new THREE.TorusGeometry(.5,.06,8,20),new THREE.MeshStandardMaterial({color:0xffcf6b,metalness:.7,roughness:.3}));helmet.rotation.x=Math.PI/2;helmet.position.y=-.1;pilot.add(helmet);
+
+// state
+const LOOP=300;
+scene.add(fill);scene.add(fill.target);let state='menu',tLoop=0,vel=new THREE.Vector3(),found=new Set(),loops=+(localStorage.weLoops||0),won=false,msgT=0,nova=0;
+const keys={};addEventListener('keydown',e=>keys[e.code]=true);addEventListener('keyup',e=>keys[e.code]=false);
+let stick={x:0,y:0},boost=false,brake=false,lift=false;
+function bindBtn(id,set){const el=$(id);el.addEventListener('touchstart',e=>{set(true);e.preventDefault();},{passive:false});el.addEventListener('touchend',e=>{set(false);e.preventDefault();},{passive:false});
+  el.addEventListener('mousedown',()=>set(true));el.addEventListener('mouseup',()=>set(false));el.addEventListener('mouseleave',()=>set(false));}
+bindBtn('thrust',v=>boost=v);bindBtn('brake',v=>brake=v);bindBtn('up',v=>lift=v);
+{const st=$('stick'),kn=$('knob');let id=null;
+ const mv=(cx,cy)=>{const r=st.getBoundingClientRect();let dx=cx-(r.left+70),dy=cy-(r.top+70);const d=Math.hypot(dx,dy);if(d>55){dx*=55/d;dy*=55/d;}kn.style.left=(45+dx)+'px';kn.style.top=(45+dy)+'px';stick={x:dx/55,y:dy/55};};
+ st.addEventListener('touchstart',e=>{id=e.changedTouches[0].identifier;mv(e.changedTouches[0].clientX,e.changedTouches[0].clientY);e.preventDefault();},{passive:false});
+ st.addEventListener('touchmove',e=>{for(const t of e.changedTouches)if(t.identifier===id)mv(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+ st.addEventListener('touchend',e=>{id=null;stick={x:0,y:0};kn.style.left='45px';kn.style.top='45px';e.preventDefault();},{passive:false});}
+function say(t,d=5){$('msg').textContent=t;$('msg').style.opacity=1;msgT=d;}
+
+function resetLoop(){
+  tLoop=0;nova=0;vel.set(0,0,0);
+  const p=PL[0];updatePlanets(0);
+  const pos=p.g.position.clone().add(new THREE.Vector3(0,p.r+6,0));ship.position.copy(pos);
+  ship.quaternion.identity();ship.lookAt(PL[1].g.position.clone().setY(pos.y));ship.rotateY(Math.PI);
+  cam.position.copy(new THREE.Vector3(0,4.5,16).applyQuaternion(ship.quaternion).add(ship.position));cam.quaternion.copy(ship.quaternion);
+  sunMat.color.set(0xffb347);sun.scale.setScalar(1);glow.scale.setScalar(1);glow.material.color.set(0xff7a1a);glow.material.opacity=.25;
+}
+function updatePlanets(t){for(const p of PL){const a=p.ph+t*p.sp;p.g.position.set(Math.cos(a)*p.orbit,0,Math.sin(a)*p.orbit);p.mesh.rotation.y=t*0.05;}
+  moon.position.set(Math.cos(t*.4)*70,8,Math.sin(t*.4)*70);}
+$('loops').textContent=loops?`Loops survived: ${loops}`:'';
+$('go').addEventListener('click',()=>{$('overlay').style.display='none';if(state!=='play'){if(won){found.clear();won=false;}resetLoop();state='play';say(`Loop ${loops+1}. Launch! Bones are glowing beams on each planet.`,6);}});
+resetLoop();
+
+const fwd=new THREE.Vector3(),tmp=new THREE.Vector3(),q=new THREE.Quaternion();
+let last=performance.now(),t=0;
+function frame(now){
+  const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;t+=dt;
+  if(state==='play'){
+    tLoop+=dt;
+    updatePlanets(tLoop);
+    // steering
+    const sx=stick.x+((keys.KeyD||keys.ArrowRight)?1:0)-((keys.KeyA||keys.ArrowLeft)?1:0);
+    const sy=stick.y+((keys.KeyS||keys.ArrowDown)?1:0)-((keys.KeyW||keys.ArrowUp)?1:0);
+    ship.rotateY(-sx*1.6*dt);ship.rotateX(-sy*1.3*dt);
+    ship.rotateZ(-ship.rotation.z*0.0);
+    fwd.set(0,0,-1).applyQuaternion(ship.quaternion);
+    const up=new THREE.Vector3(0,1,0).applyQuaternion(ship.quaternion);
+    if(boost||keys.ShiftLeft||keys.ShiftRight)vel.addScaledVector(fwd,60*dt);
+    if(brake||keys.ControlLeft)vel.multiplyScalar(1-2.2*dt);
+    if(lift||keys.Space)vel.addScaledVector(up,30*dt);
+    // gravity from planets & sun
+    for(const p of PL){tmp.subVectors(p.g.position,ship.position);const d=tmp.length();const gr=Math.min(25,(p.r*p.r*0.9)/(d*d)*9);vel.addScaledVector(tmp.normalize(),gr*dt);
+      if(d<p.r+2.5){ // land / collide
+        const n=ship.position.clone().sub(p.g.position).normalize();ship.position.copy(p.g.position).addScaledVector(n,p.r+2.5);
+        const vn=vel.dot(n);if(vn<0)vel.addScaledVector(n,-vn);vel.multiplyScalar(1-4*dt);
+        // carry with planet
+      }
+      // collect bone
+      if(!found.has(p.name)){p.bone.getWorldPosition(tmp);if(tmp.distanceTo(ship.position)<9){found.add(p.name);say(LORE[found.size-1],8);if(navigator.vibrate)navigator.vibrate([60,40,60]);
+        if(found.size===5){won=true;setTimeout(()=>{state='menu';$('overlay').style.display='flex';$('overlay').querySelector('h1').textContent='🏆 Loop Broken!';$('go').textContent='Play again 🚀';},3500);}}}
+    }
+    tmp.copy(ship.position);const ds=tmp.length();vel.addScaledVector(tmp.normalize().negate(),Math.min(30,160*160*0.6/(ds*ds)*9)*dt);
+    if(ds<215){say('🔥 You flew into the sun. The loop resets…',4);endLoop();}
+    if(vel.length()>220)vel.setLength(220);
+    ship.position.addScaledVector(vel,dt);
+    flame.scale.set(.6,(boost||keys.ShiftLeft)?.8+Math.random()*.4:.15,.6);
+    pilot.rotation.z=Math.sin(t*3)*.08;
+    // supernova
+    const left=LOOP-tLoop;
+    if(left<40){const k=1-left/40;sunMat.color.setRGB(1,0.7-0.5*k,0.28-0.25*k);sun.scale.setScalar(1+k*1.2);glow.material.color.set(0xff2a00);glow.material.opacity=.25+k*.3;}
+    if(left<=0){nova+=dt;sun.scale.setScalar(2.2+nova*300);glow.scale.setScalar(2.2+nova*320);sunMat.color.set(0x99ccff);glow.material.color.set(0x88aaff);
+      if(nova<.1)say('💥 The sun went supernova…',4);if(nova>2.2)endLoop();}
+    const mm=Math.max(0,Math.floor(left/60)),ss=Math.max(0,Math.floor(left%60));$('timer').textContent=`☀️ ${mm}:${String(ss).padStart(2,'0')}`;$('timer').style.color=left<40?'#ff7a5a':'#fff';
+    $('found').textContent=`🦴 ${found.size}/5`;
+    // nearest planet
+    let near=null,nd=1e9;for(const p of PL){const d=p.g.position.distanceTo(ship.position)-p.r;if(d<nd){nd=d;near=p;}}
+    $('mini').innerHTML=`${near.name}: ${Math.max(0,Math.round(nd))} m${found.has(near.name)?' ✅':''}<br>Speed ${Math.round(vel.length())}`;
+  } else updatePlanets(t*.5);
+  if(msgT>0){msgT-=dt;if(msgT<=0)$('msg').style.opacity=0;}
+  // camera chase
+  const back=new THREE.Vector3(0,4.5,16).applyQuaternion(ship.quaternion).add(ship.position);
+  cam.position.lerp(back,Math.min(1,dt*5));
+  q.copy(ship.quaternion);cam.quaternion.slerp(q,Math.min(1,dt*5));
+  fill.position.copy(cam.position).add(new THREE.Vector3(0,5,0));fill.target=ship;comp.render();requestAnimationFrame(frame);
+}
+function endLoop(){loops++;localStorage.weLoops=loops;state='menu';setTimeout(()=>{$('overlay').style.display='flex';$('overlay').querySelector('h1').textContent='🌀 The loop restarts';
+  $('go').textContent='Wake up again 🚀';$('loops').textContent=`Loops: ${loops} · Bones found (kept across loops): ${found.size}/5`;},1200);}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
